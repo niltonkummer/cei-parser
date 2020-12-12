@@ -1,4 +1,4 @@
-module read_xls
+module cei_parser
 
 go 1.14
 

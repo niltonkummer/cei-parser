@@ -1,8 +1,8 @@
-package main
+package parser
 
 import (
+	"errors"
 	"github.com/shopspring/decimal"
-	"os"
 	"path/filepath"
 	"strings"
 )
@@ -14,29 +14,25 @@ type Stock struct {
 	Total  int
 	Price  decimal.Decimal
 	Amount decimal.Decimal
+	Div    decimal.Decimal
+	JCP    decimal.Decimal
 }
 
 type Parser interface {
-	Decode() error
+	Decode() ([]*Stock, error)
 }
 
 func cleanValue(v string) string {
 	return strings.Trim(v, " \t\n")
 }
 
-func detectExtension(filename string) Parser {
+func DetectExtension(filename string) (Parser, error) {
 	ext := filepath.Ext(filename)
 	switch ext {
 	case ".xls":
-		return &xlsDecoder{path: filename}
+		return &xlsDecoder{path: filename}, nil
 	case ".xlsx":
-		return &xlsxDecoder{path: filename}
+		return &xlsxDecoder{path: filename}, nil
 	}
-	return nil
-}
-
-func main() {
-
-	parser := detectExtension(os.Args[1])
-	parser.Decode()
+	return nil, errors.New("invalid format")
 }

@@ -1,11 +1,10 @@
-package main
+package parser
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/shopspring/decimal"
 	"github.com/tealeg/xlsx"
-	"os"
 	"reflect"
 	"strings"
 )
@@ -14,27 +13,23 @@ type xlsxDecoder struct {
 	path string
 }
 
-func (x *xlsxDecoder) Decode() error {
+func (x *xlsxDecoder) Decode() ([]*Stock, error) {
 
 	f, err := xlsx.OpenFile(x.path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	for _, sheet := range f.Sheets {
-		parseSheet(sheet)
+		return parseSheet(sheet), nil
 	}
-	return nil
+	return nil, errors.New("empty spread sheet")
 }
 
-func parseSheet(sheet *xlsx.Sheet) {
-
-	months := [][]*Stock{}
+func parseSheet(sheet *xlsx.Sheet) (assets []*Stock) {
 
 	for line, row := range sheet.Rows {
-
 		for col, cell := range row.Cells {
-
 			switch {
 			case strings.Contains(strings.ToLower(cleanValue(cell.Value)), "resumo dos saldos"):
 				fmt.Println("Ativos em custódia:")
@@ -46,7 +41,7 @@ func parseSheet(sheet *xlsx.Sheet) {
 					}
 				}
 				lineActives := lineHeaders + 1
-				var assets []*Stock
+
 			stopAssets:
 				for _, row := range sheet.Rows[lineActives:] {
 					var currentPos int
@@ -79,34 +74,8 @@ func parseSheet(sheet *xlsx.Sheet) {
 					}
 					assets = append(assets, stock)
 				}
-
-				fmt.Println("|" + strings.Join(headers, "\t|") + "|")
-
-				for _, activePart := range assets {
-					v := reflect.ValueOf(activePart).Elem()
-					item := []string{}
-					for i := 0; i < v.NumField(); i++ {
-						item = append(item, fmt.Sprintf("%v", v.Field(i).Interface()))
-					}
-					fmt.Println("|" + strings.Join(item, "\t|") + "|")
-				}
-
-				months = append(months, assets)
-
-			default:
-
 			}
-
-			/*if strings.ToLower(strings.Trim(cell.Value, " \t\n")) == "total creditado" {
-				fmt.Println("Total Creditado", line, col, cell)
-				foundCredit = true
-				continue
-			}
-			if foundCredit && cell.Value != "" {
-				fmt.Println("Valor", line, col, cell)
-			}
-			*/
 		}
 	}
-	json.NewEncoder(os.Stdout).Encode(months)
+	return
 }

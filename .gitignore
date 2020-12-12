@@ -1,3 +1,4 @@
 *.xls
 *.xlsx
 .idea
+bin/cei-parser

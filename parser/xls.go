@@ -1,12 +1,9 @@
-package main
+package parser
 
 import (
-	"encoding/json"
-	"fmt"
 	"github.com/extrame/xls"
 	"github.com/shopspring/decimal"
 
-	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -16,21 +13,18 @@ type xlsDecoder struct {
 	path string
 }
 
-func (x *xlsDecoder) Decode() error {
+func (x *xlsDecoder) Decode() ([]*Stock, error) {
 
 	f, err := xls.Open(x.path, "utf-8")
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	parseXlsSheet(f.GetSheet(0))
+	return parseXlsSheet(f.GetSheet(0)), nil
 
-	return nil
 }
 
-func parseXlsSheet(sheet *xls.WorkSheet) {
-
-	months := [][]*Stock{}
+func parseXlsSheet(sheet *xls.WorkSheet) (assets []*Stock) {
 
 	for line := uint16(0); line < sheet.MaxRow; line++ {
 		row := sheet.Row(int(line))
@@ -38,8 +32,8 @@ func parseXlsSheet(sheet *xls.WorkSheet) {
 			cell := row.Col(col)
 			switch {
 			case strings.Contains(strings.ToLower(cleanValue(cell)), "resumo dos saldos"):
-				fmt.Println("Ativos em custódia:")
-				headers := []string{}
+
+				var headers []string
 				lineHeaders := line + 2
 				rowHeader := sheet.Row(int(lineHeaders))
 				for colH := uint16(col); colH < sheet.MaxRow; colH++ {
@@ -49,7 +43,7 @@ func parseXlsSheet(sheet *xls.WorkSheet) {
 					}
 				}
 				lineActives := lineHeaders + 1
-				var assets []*Stock
+
 			stopAssets:
 				for ; ; lineActives++ {
 					row := sheet.Row(int(lineActives))
@@ -85,34 +79,8 @@ func parseXlsSheet(sheet *xls.WorkSheet) {
 					}
 					assets = append(assets, stock)
 				}
-
-				fmt.Println("|" + strings.Join(headers, "\t|") + "|")
-
-				for _, activePart := range assets {
-					v := reflect.ValueOf(activePart).Elem()
-					item := []string{}
-					for i := 0; i < v.NumField(); i++ {
-						item = append(item, fmt.Sprintf("%v", v.Field(i).Interface()))
-					}
-					fmt.Println("|" + strings.Join(item, "\t|") + "|")
-				}
-
-				months = append(months, assets)
-
-			default:
-
 			}
-
-			/*if strings.ToLower(strings.Trim(cell.Value, " \t\n")) == "total creditado" {
-				fmt.Println("Total Creditado", line, col, cell)
-				foundCredit = true
-				continue
-			}
-			if foundCredit && cell.Value != "" {
-				fmt.Println("Valor", line, col, cell)
-			}
-			*/
 		}
 	}
-	json.NewEncoder(os.Stdout).Encode(months)
+	return
 }
