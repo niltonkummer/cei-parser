@@ -33,8 +33,7 @@ func fieldsToStruct(fields map[string]interface{}, str interface{}) {
 			t, ok := value.(time.Time)
 			if !ok {
 				a, _ := strconv.Atoi(fmt.Sprintf("%v", value))
-				v := time.Date(1900, 1, a-1, 0, 0, 0, 0, time.UTC)
-				valueOf.Field(currentPos).Set(reflect.ValueOf(v))
+				t = time.Date(1900, 1, a-1, 0, 0, 0, 0, time.UTC)
 			}
 			valueOf.Field(currentPos).Set(reflect.ValueOf(t))
 		} else if valueOf.Field(currentPos).Type().Name() == "Decimal" {

@@ -127,11 +127,13 @@ stopDeals:
 
 			cell.Value = cleanValue(cell.Value)
 
-			value := cell.String()
+			var value interface{} = cell.String()
 			if value != "" && value != "#" {
 				if cell.IsTime() {
-					t, _ := cell.GetTime(false)
-					value = fmt.Sprintf("%v", t)
+					t, err := cell.GetTime(false)
+					if err == nil {
+						value = t
+					}
 				}
 
 				emptyLine = false
