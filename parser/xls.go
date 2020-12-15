@@ -2,85 +2,207 @@ package parser
 
 import (
 	"github.com/extrame/xls"
-	"github.com/shopspring/decimal"
+	"time"
 
-	"reflect"
-	"strconv"
 	"strings"
 )
 
+// TODO: Parse headers
+
 type xlsDecoder struct {
 	path string
+	wb   *xls.WorkBook
 }
 
-func (x *xlsDecoder) Decode() ([]*Stock, error) {
+func (x *xlsDecoder) Decode() (*FinancialAssets, error) {
 
 	f, err := xls.Open(x.path, "utf-8")
 	if err != nil {
 		return nil, err
 	}
+	x.wb = f
 
-	return parseXlsSheet(f.GetSheet(0)), nil
+	return x.parseXlsSheet(f.GetSheet(0)), nil
 
 }
 
-func parseXlsSheet(sheet *xls.WorkSheet) (assets []*Stock) {
+func (x *xlsDecoder) parseXlsSheet(sheet *xls.WorkSheet) (financial *FinancialAssets) {
+
+	date, err := time.Parse("02/01/2006", strings.TrimSpace(
+		strings.Replace(strings.ToLower(sheet.Row(CellRowDate).Col(CellColDate)), PrefixToGetDate, "", -1)))
+	if err != nil {
+		return nil
+	}
+
+	var (
+		assets   []*Stock
+		proceeds []*Proceed
+		deals    []*Deal
+	)
+
+	financial = &FinancialAssets{
+		MonthPeriod: date,
+	}
 
 	for line := uint16(0); line < sheet.MaxRow; line++ {
 		row := sheet.Row(int(line))
 		for col := 0; col < row.LastCol(); col++ {
+
 			cell := row.Col(col)
+
 			switch {
-			case strings.Contains(strings.ToLower(cleanValue(cell)), "resumo dos saldos"):
+			case strings.Contains(normalizeToLower(cell), MagicKeyResumoSaldos):
+				assets = x.parseCurrentAssets(sheet, line, col)
 
-				var headers []string
-				lineHeaders := line + 2
-				rowHeader := sheet.Row(int(lineHeaders))
-				for colH := uint16(col); colH < sheet.MaxRow; colH++ {
-					c := rowHeader.Col(int(colH))
-					if c != "" {
-						headers = append(headers, c)
-					}
-				}
-				lineActives := lineHeaders + 1
+			case strings.Contains(normalizeToLower(cell), MagicKeyProventosEmDinheiroCreditados):
+				proceeds = x.parseCreditedEarnings(sheet, line, col)
 
-			stopAssets:
-				for ; ; lineActives++ {
-					row := sheet.Row(int(lineActives))
+			case strings.Contains(normalizeToLower(cell), MagicKeyInformacoesDeNegociacaoDeAtivos):
+				deals = x.parseAssetDeals(sheet, line, col)
 
-					var currentPos int
-
-					stock := &Stock{}
-					valueOf := reflect.ValueOf(stock).Elem()
-					for cellA := 0; cellA < row.LastCol(); cellA++ {
-						cell = row.Col(cellA)
-						// Point to stop loop
-						if strings.ToLower(cleanValue(cell)) == "valorização em reais" {
-							break stopAssets
-						}
-
-						valueCleaned := cleanValue(cell)
-						if valueCleaned != "" && valueCleaned != "#" && currentPos < valueOf.NumField() {
-
-							if valueOf.Field(currentPos).Type().Kind() == reflect.Int {
-								v, err := strconv.ParseInt(cell, 10, 64)
-								if err == nil {
-									valueOf.Field(currentPos).SetInt(v)
-								}
-							} else if valueOf.Field(currentPos).Type().Name() == "Decimal" {
-								v, _ := decimal.NewFromString(valueCleaned)
-								valueOf.Field(currentPos).Set(reflect.ValueOf(v))
-							} else {
-								valueOf.Field(currentPos).SetString(valueCleaned)
-							}
-
-							currentPos++
-						}
-					}
-					assets = append(assets, stock)
-				}
 			}
+
 		}
 	}
+
+	financial.Stocks = assets
+	financial.Proceeds = proceeds
+	financial.Deals = deals
+
+	return
+}
+
+func (x *xlsDecoder) parseAssetDeals(sheet *xls.WorkSheet, line uint16, col int) (deals []*Deal) {
+
+	var header []string
+	lineHeader := line + 2
+	rowHeader := sheet.Row(int(lineHeader))
+	for colH := uint16(col); colH < sheet.MaxRow; colH++ {
+		c := rowHeader.Col(int(colH))
+		if c != "" {
+			header = append(header, cleanValue(c))
+		}
+	}
+
+	lineDeals := lineHeader + 1
+
+	fields := make(map[string]interface{}, 8)
+
+stopDeals:
+	for ; ; lineDeals++ {
+		currentRow := sheet.Row(int(lineDeals))
+
+		var currentPos int
+
+		emptyLine := true
+
+		for cellA := 0; cellA < currentRow.LastCol(); cellA++ {
+
+			cell := cleanValue(currentRow.Col(cellA))
+			if cell != "" && cell != "#" {
+
+				emptyLine = false
+
+				fields[header[currentPos]] = cell
+				currentPos++
+			}
+		}
+		if emptyLine {
+			break stopDeals
+		}
+
+		deal := &Deal{}
+		fieldsToStruct(fields, deal)
+		deals = append(deals, deal)
+	}
+	return
+}
+
+func (x *xlsDecoder) parseCreditedEarnings(sheet *xls.WorkSheet, line uint16, col int) (list []*Proceed) {
+
+	var header []string
+	lineHeader := line + 1
+	rowHeader := sheet.Row(int(lineHeader))
+	for colH := uint16(col); colH < sheet.MaxRow; colH++ {
+		c := rowHeader.Col(int(colH))
+		if c != "" {
+			header = append(header, c)
+		}
+	}
+	lineProceeds := lineHeader + 1
+
+	fields := make(map[string]interface{}, 8)
+
+stopProceeds:
+	for ; ; lineProceeds++ {
+		currentRow := sheet.Row(int(lineProceeds))
+
+		var currentPos int
+
+		for cellA := 0; cellA < currentRow.LastCol(); cellA++ {
+			cell := cleanValue(currentRow.Col(cellA))
+
+			// Point to stop loop
+
+			if normalizeToLower(cell) == MagicKeyTotalCreditado {
+				break stopProceeds
+			}
+
+			if cell != "" && cell != "#" {
+
+				fields[header[currentPos]] = cell
+
+				currentPos++
+			}
+		}
+		profit := &Proceed{}
+		fieldsToStruct(fields, profit)
+		list = append(list, profit)
+	}
+	return
+}
+
+func (x *xlsDecoder) parseCurrentAssets(sheet *xls.WorkSheet, line uint16, col int) (assets []*Stock) {
+
+	var header []string
+	lineHeader := line + 2
+
+	rowHeader := sheet.Row(int(lineHeader))
+	for colH := uint16(col); colH < sheet.MaxRow; colH++ {
+		c := rowHeader.Col(int(colH))
+		if c != "" {
+			header = append(header, c)
+		}
+	}
+
+	lineAssets := lineHeader + 1
+
+	fields := make(map[string]interface{}, 8)
+
+stopAssets:
+	for ; ; lineAssets++ {
+		currentRow := sheet.Row(int(lineAssets))
+
+		var currentPos int
+
+		for cellA := 0; cellA < currentRow.LastCol(); cellA++ {
+			cell := cleanValue(currentRow.Col(cellA))
+
+			// Point to stop the loop
+			if normalizeToLower(cell) == MagicKeyValorizacaoEmReais {
+				break stopAssets
+			}
+
+			if cell != "" && cell != "#" {
+				fields[header[currentPos]] = cell
+				currentPos++
+			}
+		}
+
+		stock := &Stock{}
+		fieldsToStruct(fields, stock)
+		assets = append(assets, stock)
+	}
+
 	return
 }

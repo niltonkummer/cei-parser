@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+
+	"github.com/tidwall/pretty"
 )
 
 func init() {
@@ -30,5 +32,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	json.NewEncoder(os.Stdout).Encode(res)
+	data, err := json.Marshal(res)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	os.Stdout.Write(pretty.Pretty(data))
+
 }

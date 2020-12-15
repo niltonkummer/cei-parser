@@ -7,4 +7,5 @@ require (
 	github.com/extrame/xls v0.0.1
 	github.com/shopspring/decimal v1.2.0
 	github.com/tealeg/xlsx v1.0.5
+	github.com/tidwall/pretty v1.0.2
 )
