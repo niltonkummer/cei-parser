@@ -1,13 +1,29 @@
+name: Go
+
 on:
-  # Trigger analysis when pushing in master or pull requests, and when creating
-  # a pull request.
   push:
-    branches:
-      - main
+    branches: [ main, feat/sonar-test ]
   pull_request:
     types: [opened, synchronize, reopened]
-name: Main Workflow
+
 jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.15
+
+      - name: Build
+        run: go build -v ./...
+
+      - name: Test
+        run: go test -v "./..." -coverprofile="coverage.out" -covermode=count -json > test-report.out
+
   sonarcloud:
     runs-on: ubuntu-latest
     steps:
